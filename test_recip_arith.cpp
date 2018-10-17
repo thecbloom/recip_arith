@@ -1,11 +1,17 @@
-#ifdef _MSC_VER
-#include "msvc_stdint.h"
-#else
-#include <stdint.h>
-#endif
+/**
+test_recip_arith.cpp
+A Multi-Symbol Division Free Arithmetic Coder with Low Coding Loss using Reciprocal Multiplication
 
+see:
+https://github.com/thecbloom/recip_arith
+
+copyright 2018 Charles Bloom
+public domain
+**/
 #define _CRT_SECURE_NO_WARNINGS
+
 //#include <assert.h>
+// define assert or recip_arith_assert before including recip_arith.h
 
 #include "recip_arith.h"
 
@@ -15,6 +21,48 @@
 
 static uint8_t * read_whole_file(const char *name,size_t * pLength);
 
+//=================================================================
+//
+// test functions with the cacm87 cdf-range map
+//  not in recip_arith.h
+
+// encode a symbol with a given cdf range
+static recip_arith_inline void recip_arith_encoder_put_cacm87(recip_arith_encoder * ac,uint32_t cdf_low,uint32_t cdf_freq,uint32_t cdf_bits)
+{
+	recip_arith_assert( (cdf_low + cdf_freq) <= ((uint32_t)1<<cdf_bits) );
+	recip_arith_assert( cdf_freq > 0 );
+	recip_arith_assert( ac->range >= ((uint32_t)1<<cdf_bits) );
+
+	uint32_t save_low = ac->low;
+	
+	uint32_t lo = (uint32_t)( ((uint64_t)cdf_low * ac->range) >> cdf_bits);
+	uint32_t hi = (uint32_t)( ((uint64_t)(cdf_low + cdf_freq) * ac->range) >> cdf_bits);
+	ac->low += lo;
+	ac->range = hi - lo;
+	
+    if ( ac->low < save_low ) recip_arith_encoder_carry(ac);
+}
+
+// peek finds the target cdf currently specified (mutates decoder)
+static recip_arith_inline uint32_t recip_arith_decoder_peek_cacm87(recip_arith_decoder * ac,uint32_t cdf_bits)
+{
+	recip_arith_assert( ac->range >= ((uint32_t)1<<cdf_bits) );
+	
+	uint32_t target = (uint32_t)( ((((uint64_t)ac->code) << cdf_bits) + ((uint64_t)1<<cdf_bits) - 1 ) / ac->range );
+	recip_arith_assert( target <= ((uint32_t)1<<cdf_bits) );
+	return target;
+}
+
+// remove the symbol found by the previous call to peek
+static recip_arith_inline void recip_arith_decoder_remove_cacm87(recip_arith_decoder * ac,uint32_t cdf_low,uint32_t cdf_freq,int cdf_bits)
+{
+	uint32_t lo = (uint32_t)( ((uint64_t)cdf_low * ac->range) >> cdf_bits);
+	uint32_t hi = (uint32_t)( ((uint64_t)(cdf_low + cdf_freq) * ac->range) >> cdf_bits);
+    ac->code -= lo;
+    ac->range = hi - lo;
+}
+
+//=================================================================
 
 int main(int argc,char * argv[])
 {
@@ -176,8 +224,6 @@ int main(int argc,char * argv[])
 	
 	recip_arith_decoder dec;
 	
-	TIMING_LOOP_PRE_STANDARD(decode_rangecoder,20)
-	
 	recip_arith_decoder_start(&dec,comp_buf);
 	
 	for(size_t i=0;i<file_len;i++) 
@@ -191,8 +237,6 @@ int main(int argc,char * argv[])
 		recip_arith_decoder_remove_rangecoder(&dec,low,freq);
 		recip_arith_decoder_renorm(&dec);
 	}
-	
-	TIMING_LOOP_POST_STANDARD(decode_rangecoder,file_len);
 	
 	int chk = memcmp(file_buf,dec_buf,file_len);
 	recip_arith_assert(chk == 0 );
@@ -229,9 +273,7 @@ int main(int argc,char * argv[])
 	{
 	
 	recip_arith_decoder dec;
-	
-	TIMING_LOOP_PRE_STANDARD(decode_reciparith,20)
-	
+		
 	recip_arith_decoder_start(&dec,comp_buf);
 	
 	for(size_t i=0;i<file_len;i++) 
@@ -244,9 +286,7 @@ int main(int argc,char * argv[])
 		recip_arith_decoder_remove(&dec,low,freq);
 		recip_arith_decoder_renorm(&dec);
 	}
-	
-	TIMING_LOOP_POST_STANDARD(decode_reciparith,file_len);
-	
+		
 	int chk = memcmp(file_buf,dec_buf,file_len);
 	recip_arith_assert(chk == 0 );
 	printf("memcmp : %d\n",chk);
@@ -257,9 +297,7 @@ int main(int argc,char * argv[])
 	{
 	
 	recip_arith64_decoder dec;
-	
-	TIMING_LOOP_PRE_STANDARD(decode_reciparith64,20)
-	
+		
 	recip_arith64_decoder_start(&dec,comp_buf);
 	
 	recip_arith_assert( (3*cdf_bits) + RECIP_ARITH_TABLE_BITS <= 56 );
@@ -298,9 +336,7 @@ int main(int argc,char * argv[])
 		
 		recip_arith64_decoder_renorm(&dec);
 	}
-	
-	TIMING_LOOP_POST_STANDARD(decode_reciparith64,file_len);
-	
+		
 	int chk = memcmp(file_buf,dec_buf,file_len);
 	recip_arith_assert(chk == 0 );
 	printf("memcmp : %d\n",chk);

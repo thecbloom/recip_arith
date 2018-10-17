@@ -3,9 +3,8 @@
 recip_arith.h
 A Multi-Symbol Division Free Arithmetic Coder with Low Coding Loss using Reciprocal Multiplication
 
-see @@ web site
-
-@@ optional end of range map
+see:
+https://github.com/thecbloom/recip_arith
 
 copyright 2018 Charles Bloom
 public domain
@@ -13,16 +12,28 @@ public domain
 #ifndef RECIP_ARITH_H
 #define RECIP_ARITH_H
 
-//#include "stdint.h"
 #include "clz.h"
 
 #define RECIP_ARITH_TABLE_BITS			(8)
+
+// RECIP_ARITH_TABLE_BITS is the number of bits of "range" used in the cdf->range map
+//	more bits = less coding loss , but the table takes more of L1
+//  more bits also requires larger reciprocals to invert exactly
+
 #define RECIP_ARITH_NUMERATOR_BITS		(32)
 
-#define RECIP_ARITH_RANGE_MIN_BITS		(24)
+// RECIP_ARITH_NUMERATOR_BITS must be large enough for the reciprocal to
+//	 be exact for numerators up to (cdf_bits + RECIP_ARITH_TABLE_BITS)
+//	it must also be small enough to fit in a u32
+
+#define RECIP_ARITH_RANGE_MIN_BITS		(24)  // 32-bit range coder has 24-31 bits
 
 // maximum cdf is limitted by what can fit in range, and by the reciprocal numerator precision :
-#define RECIP_ARITH_MAX_CDF_BITS		MIN( RECIP_ARITH_RANGE_MIN_BITS , (RECIP_ARITH_NUMERATOR_BITS - RECIP_ARITH_TABLE_BITS) )
+#define RECIP_ARITH_MAX_CDF_BITS		min( RECIP_ARITH_RANGE_MIN_BITS , (RECIP_ARITH_NUMERATOR_BITS - RECIP_ARITH_TABLE_BITS) )
+
+//=========================================================================================
+
+// define recip_arith_assert & recip_arith_inline before including
 
 #ifndef recip_arith_assert
 #ifdef assert
@@ -188,11 +199,10 @@ static recip_arith_inline void recip_arith_encoder_put(recip_arith_encoder * ac,
 
 	uint32_t r_top = range >> (32 - range_clz - RECIP_ARITH_TABLE_BITS);
 	uint32_t r_norm = r_top << ( 32 - range_clz - RECIP_ARITH_TABLE_BITS - cdf_bits);
-		
-	ac->range = cdf_freq * r_norm;
-	
+			
 	uint32_t save_low = ac->low;	
 	ac->low += cdf_low * r_norm;
+	ac->range = cdf_freq * r_norm;
 	
     if ( ac->low < save_low ) recip_arith_encoder_carry(ac);
 }
@@ -222,6 +232,9 @@ static recip_arith_inline uint32_t recip_arith_decoder_peek(recip_arith_decoder 
 	//	that way when we do the reciprocal multiply we get back to those values exactly
 
 	uint32_t target = (uint32_t)( ( code_necessary_bits * (uint64_t)recip_arith_table[r_top] ) >> RECIP_ARITH_NUMERATOR_BITS );
+
+	//recip_arith_assert( target == code_necessary_bits / r_top );
+	//recip_arith_assert( target == ac->code / r_norm );
 		
 	recip_arith_assert( target <= ((uint32_t)1<<cdf_bits) );
 	return target;
@@ -270,9 +283,9 @@ static recip_arith_inline void recip_arith_encoder_put_rangecoder(recip_arith_en
 
 	uint32_t save_low = ac->low;
 	
-	ac->range >>= cdf_bits;
-	ac->low += cdf_low * ac->range;
-	ac->range *= cdf_freq;
+	uint32_t r_norm = ac->range >> cdf_bits;
+	ac->low += cdf_low * r_norm;
+	ac->range = cdf_freq * r_norm;
 	
     if ( ac->low < save_low ) recip_arith_encoder_carry(ac);
 }
@@ -295,42 +308,6 @@ static recip_arith_inline void recip_arith_decoder_remove_rangecoder(recip_arith
 	uint32_t r_norm = ac->range; // == range >> cdf_bits
     ac->code -= cdf_low * r_norm;
     ac->range = cdf_freq * r_norm;
-}
-
-// encode a symbol with a given cdf range
-static recip_arith_inline void recip_arith_encoder_put_cacm87(recip_arith_encoder * ac,uint32_t cdf_low,uint32_t cdf_freq,uint32_t cdf_bits)
-{
-	recip_arith_assert( (cdf_low + cdf_freq) <= ((uint32_t)1<<cdf_bits) );
-	recip_arith_assert( cdf_freq > 0 );
-	recip_arith_assert( ac->range >= ((uint32_t)1<<cdf_bits) );
-
-	uint32_t save_low = ac->low;
-	
-	uint32_t lo = (uint32_t)( ((uint64_t)cdf_low * ac->range) >> cdf_bits);
-	uint32_t hi = (uint32_t)( ((uint64_t)(cdf_low + cdf_freq) * ac->range) >> cdf_bits);
-	ac->low += lo;
-	ac->range = hi - lo;
-	
-    if ( ac->low < save_low ) recip_arith_encoder_carry(ac);
-}
-
-// peek finds the target cdf currently specified (mutates decoder)
-static recip_arith_inline uint32_t recip_arith_decoder_peek_cacm87(recip_arith_decoder * ac,uint32_t cdf_bits)
-{
-	recip_arith_assert( ac->range >= ((uint32_t)1<<cdf_bits) );
-	
-	uint32_t target = (uint32_t)( ((((uint64_t)ac->code) << cdf_bits) + ((uint64_t)1<<cdf_bits) - 1 ) / ac->range );
-	recip_arith_assert( target <= ((uint32_t)1<<cdf_bits) );
-	return target;
-}
-
-// remove the symbol found by the previous call to peek
-static recip_arith_inline void recip_arith_decoder_remove_cacm87(recip_arith_decoder * ac,uint32_t cdf_low,uint32_t cdf_freq,int cdf_bits)
-{
-	uint32_t lo = (uint32_t)( ((uint64_t)cdf_low * ac->range) >> cdf_bits);
-	uint32_t hi = (uint32_t)( ((uint64_t)(cdf_low + cdf_freq) * ac->range) >> cdf_bits);
-    ac->code -= lo;
-    ac->range = hi - lo;
 }
 
 //=========================================================================================
@@ -374,19 +351,6 @@ static recip_arith_inline void recip_arith64_decoder_renorm(recip_arith64_decode
 		ac->code |= *(ac->ptr)++;
 		ac->range <<= 8;
 	}
-}
-
-static recip_arith_inline void recip_arith64_decoder_renorm_branchless(recip_arith64_decoder * ac)
-{
-	int clz = clz64(ac->range);
-	RR_ASSERT( clz < 56 );
-	int num_bits = clz & 56; // 56 = 63-7
-	ac->code <<= num_bits;
-	ac->range <<= num_bits;
-	uint64_t next8 = RR_GET64_BE(ac->ptr);
-	ac->code |= next8 >> (63 - num_bits) >> 1;
-	ac->ptr += (num_bits>>3);
-	RR_ASSERT( clz64(ac->range) < 8 );
 }
 
 //=========================================================================================

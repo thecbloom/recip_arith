@@ -1,3 +1,14 @@
+/**
+recip_arith.cpp
+A Multi-Symbol Division Free Arithmetic Coder with Low Coding Loss using Reciprocal Multiplication
+
+see:
+https://github.com/thecbloom/recip_arith
+
+copyright 2018 Charles Bloom
+public domain
+**/
+
 #include "recip_arith.h"
 
 // zero recip_arith_table so we can assert that recip_arith_table_init as called

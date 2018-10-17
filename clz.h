@@ -1,5 +1,6 @@
 #pragma once
 /**
+clz.h
 clz32 & clz64
 
 undefined on 0
@@ -11,7 +12,20 @@ public domain
 #ifndef CLZ_H
 #define CLZ_H
 
-//#include "stdint.h"
+#ifdef _MSC_VER
+#ifndef _STDINT
+
+typedef unsigned char uint8_t;
+typedef __int32 int32_t;
+typedef unsigned __int32 uint32_t;
+typedef __int64 int64_t;
+typedef unsigned __int64 uint64_t;
+
+#endif
+#else
+#include <stdint.h>
+#endif
+
 
 #ifdef _MSC_VER
 
