@@ -33,6 +33,9 @@ while recip_arith does :
 	ac->range = cdf_freq * r_norm;
 ```
 
+For more, see [blog series at cbloomrants](http://cbloomrants.blogspot.com/2018/10/10-16-18-multi-symbol-division-free.html) which describes
+recip_arith and the algorithms used in detail.
+
 ## Coding Efficiency
 
 The coding loss of "recip_arith" with 8 bit tables is reliably under 0.005 bpb (around 0.1%) , in constrast to SM98 where the coding loss can be 10X
@@ -86,7 +89,7 @@ stored as {low,range} or {low,high}.  Renormalization can use branches or be bra
 
 ## License
 
-This project is public domain.
+This project is public domain.  (MIT License)
 
 ## Acknowledgments
 
