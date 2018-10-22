@@ -32,14 +32,13 @@ static recip_arith_inline void recip_arith_encoder_put_cacm87(recip_arith_encode
     recip_arith_assert( (cdf_low + cdf_freq) <= ((uint32_t)1<<cdf_bits) );
     recip_arith_assert( cdf_freq > 0 );
     recip_arith_assert( ac->range >= ((uint32_t)1<<cdf_bits) );
-
-    uint32_t save_low = ac->low;
     
     uint32_t lo = (uint32_t)( ((uint64_t)cdf_low * ac->range) >> cdf_bits);
     uint32_t hi = (uint32_t)( ((uint64_t)(cdf_low + cdf_freq) * ac->range) >> cdf_bits);
-    ac->low += lo;
-    ac->range = hi - lo;
     
+    uint32_t save_low = ac->low;
+    ac->low += lo;
+    ac->range = hi - lo;    
     if ( ac->low < save_low ) recip_arith_encoder_carry(ac);
 }
 
@@ -60,6 +59,52 @@ static recip_arith_inline void recip_arith_decoder_remove_cacm87(recip_arith_dec
     uint32_t hi = (uint32_t)( ((uint64_t)(cdf_low + cdf_freq) * ac->range) >> cdf_bits);
     ac->code -= lo;
     ac->range = hi - lo;
+}
+
+//=================================================================
+//
+// test functions with the sm98 cdf-range map
+//  not in recip_arith.h
+
+#define MAX(a,b)            (((a) > (b)) ? (a) : (b))
+
+// encode a symbol with a given cdf range
+static recip_arith_inline void recip_arith_encoder_put_sm98(recip_arith_encoder * ac,uint32_t cdf_low,uint32_t cdf_freq,uint32_t cdf_bits)
+{
+    recip_arith_assert( (cdf_low + cdf_freq) <= ((uint32_t)1<<cdf_bits) );
+    recip_arith_assert( cdf_freq > 0 );
+    recip_arith_assert( ac->range >= ((uint32_t)1<<cdf_bits) );
+    
+    // need to find the top bit position of range
+    // an alternative implementation is to keep range left-justified
+    //  so that r_bits is always 31 and bits free varies in [0-7] at the bottom
+    uint32_t range = ac->range;
+    int range_clz = clz32(range);
+    int r_bits = 31-range_clz;
+    int cdf_to_r_shift = r_bits - cdf_bits;
+    
+    // 2<<r_bits can be 2^32 , be careful of 32 bit vars
+    //  and we need that to be compared with sign (eg. not wrapping in 32-bit)
+    //  so bump up to signed S64
+        
+    int64_t threshold = ((int64_t)2<<r_bits) - range;
+    
+    uint32_t lo = cdf_low << cdf_to_r_shift;
+    uint32_t hi = (cdf_low + cdf_freq) << cdf_to_r_shift;
+    
+    // use MAX of two mappings; 1X from the bottom or 2X down from the top :
+    //  MAX( lo , range - 2*(cdf_tot - low) )
+    // some algebra can factor that into just a satsub and add :
+    
+    lo += (uint32_t) MAX(0, (int64_t)lo - threshold);
+    hi += (uint32_t) MAX(0, (int64_t)hi - threshold);
+    
+    recip_arith_assert( hi > lo && hi <= range );
+    
+    uint32_t save_low = ac->low;
+    ac->low += lo;
+    ac->range = hi - lo;    
+    if ( ac->low < save_low ) recip_arith_encoder_carry(ac);
 }
 
 //=================================================================
@@ -147,6 +192,30 @@ int main(int argc,char * argv[])
     size_t comp_len_rangecoder;
     size_t comp_len_reciparith;
     
+    {   
+    printf("sm98:\n");
+
+    recip_arith_encoder enc;
+    recip_arith_encoder_start(&enc,comp_buf);
+    
+    for(size_t i=0;i<file_len;i++) 
+    {
+        int sym = file_buf[i];
+        uint32_t low = cdf[sym];
+        uint32_t freq = cdf[sym+1] - low; // == histogram[sym]
+        
+        recip_arith_encoder_put_sm98(&enc,low,freq,cdf_bits);
+        recip_arith_encoder_renorm(&enc);
+    }
+    
+    uint8_t * comp_end = recip_arith_encoder_finish(&enc);
+
+    size_t comp_len_sm98 = comp_end - comp_buf; 
+
+    printf("comp_len : %d = %.3f bpb\n",(int)comp_len_sm98,comp_len_sm98*8.0/file_len);
+
+    }
+    //-----------------------------------------
     {   
     printf("cacm87:\n");
 

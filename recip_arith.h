@@ -8,8 +8,6 @@ https://github.com/thecbloom/recip_arith
 
 copyright 2018 Charles Bloom
 public domain
-
-test
 **/
 #ifndef RECIP_ARITH_H
 #define RECIP_ARITH_H
@@ -200,7 +198,7 @@ static recip_arith_inline void recip_arith_encoder_put(recip_arith_encoder * ac,
     int range_clz = clz32(range);
 
     uint32_t r_top = range >> (32 - range_clz - RECIP_ARITH_TABLE_BITS);
-    uint32_t r_norm = r_top << ( 32 - range_clz - RECIP_ARITH_TABLE_BITS - cdf_bits);
+    uint32_t r_norm = r_top << (32 - range_clz - RECIP_ARITH_TABLE_BITS - cdf_bits);
             
     uint32_t save_low = ac->low;    
     ac->low += cdf_low * r_norm;
