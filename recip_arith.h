@@ -8,6 +8,8 @@ https://github.com/thecbloom/recip_arith
 
 copyright 2018 Charles Bloom
 public domain
+
+test
 **/
 #ifndef RECIP_ARITH_H
 #define RECIP_ARITH_H
