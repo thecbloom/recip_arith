@@ -38,7 +38,7 @@ recip_arith and the algorithms used in detail.
 
 ## Coding Efficiency
 
-The coding loss of "recip_arith" with 8 bit tables is reliably under 0.005 bpb (around 0.1%) , in constrast to SM98 where the coding loss can be 10X
+The coding loss of "recip_arith" with 8 bit tables is reliably under 0.005 bpb (around 0.1%) , in contrast to SM98 where the coding loss can be 10X
 higher (0.05 bpb or 1.0%)
 
 ```
